@@ -1,0 +1,109 @@
+---
+title: "Starbucks A/B Testing"
+author: "Bharathi K. Ravikumar"
+date: "2024-01-20"
+output: pdf_document
+---
+
+https://posit.co/download/rstudio-desktop/
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyverse)
+library(readxl)
+```
+
+```{r}
+df = read_csv('Starbucks.csv', show_col_types = FALSE)
+```
+
+
+## Data Cleaning
+```{r}
+sbucks <- df[-(1:2), ]
+sbucks <- df[, -(1:19)]
+sbucks <- subset(sbucks, select = -c(gender_3_TEXT, `CTRL old likeliness_NPS_GROUP`, `CTRL old NPS_NPS_GROUP`, `CUR logo like_NPS_GROUP`, `CUR logo NPS_NPS_GROUP`))
+
+sbucks <- subset(sbucks, select = -c(`Q389_NPS_GROUP`, `Q393_NPS_GROUP`, `Q394_NPS_GROUP`, `Q388_NPS_GROUP`))
+sbucks$new_logo <- ifelse(is.na(!df$`CTRL old likeliness`), 1, 0)
+
+sbucks$page1_like <- ifelse(is.na(sbucks$`CTRL old likeliness`), sbucks$Q388, sbucks$`CTRL old likeliness`)
+sbucks$page1_NPS <- ifelse(is.na(sbucks$`CTRL old NPS`), sbucks$Q389, sbucks$`CTRL old NPS`)
+sbucks$page1_text <- ifelse(is.na(sbucks$Q386), sbucks$Q390, sbucks$Q386)
+sbucks$preference <- ifelse(is.na(sbucks$`Logo preference`), sbucks$Q392, sbucks$`Logo preference`)
+
+sbucks$page2_like <- ifelse(is.na(sbucks$`CUR logo like`), sbucks$Q393, sbucks$`CUR logo like`)
+sbucks$page2_NPS <- ifelse(is.na(sbucks$`CUR logo NPS`), sbucks$Q394, sbucks$`CUR logo NPS`)
+
+sbucks$gender <- ifelse(sbucks$gender == 'Male', 0, 1)
+#male - 0, female - 1
+sbucks$preference <- ifelse(sbucks$preference == 'No', 0, 1)
+#No - 0, Yes - 1
+
+sbucks <- subset(sbucks, select = -c(`CTRL old likeliness`, Q388, Q389, `CTRL old NPS`, Q386, Q390, Q392, `Logo preference`, `CUR logo like`, Q393, Q394, `CUR logo NPS`))
+
+
+view(sbucks)
+```
+
+## Control/Treatment Subjects
+```{r}
+table(sbucks$new_logo)
+```
+
+25 people were shown the old logo first. 23 people were shown the new logo first.
+
+```{r}
+old_logo <- sbucks %>% filter(new_logo == 0)
+new_logo <- sbucks %>% filter(new_logo == 1)
+```
+
+```{r}
+# First Page Results (not significant)
+t.test(old_logo[["page1_like"]], new_logo[["page1_like"]])
+t.test(old_logo[["page1_NPS"]], new_logo[["page1_NPS"]])
+```
+
+```{r}
+# Second Page Results (After showing the old logo in the first page, users looking at the new logo at the seconf page have higher likeliness compared to seeing the old logo in the second page with the new logo group, this effect is significant. This could mean people actually prefer the newer logo after seeing the old logo in the first page.)
+t.test(old_logo[["page2_like"]], new_logo[["page2_like"]])
+t.test(old_logo[["page2_NPS"]], new_logo[["page2_NPS"]])
+```
+## Let's take a look at gender-wise page 1 likeliness and NPS 
+```{r}
+female_likeliness = lm(page1_like ~ new_logo * gender, data = sbucks)
+summary(female_likeliness)
+```
+Males love the old logo a lot compared to females. This is a significant effect.
+
+```{r}
+female_NPS = lm(page1_NPS ~ new_logo * gender, data = sbucks)
+summary(female_NPS)
+```
+There's no significant effect in NPS scores and there's no effect of gender.
+
+
+Let's study about preference effects - just the people who see the first page, then after seeing the second
+still stick to the firstpage logo.
+
+```{r}
+preference_like = lm(page1_like ~ new_logo * preference, data = sbucks)
+summary(preference_like)
+```
+People who prefer and still stick with the old logo in the first page actually have higher likeliness scores. This effect is significant at the 0.1 level. But, people who prefer and stick with the new logo in the first page have lower scores than people who see the old logo first and do not prefer it. This could mean that maybe after seeing the old logo, their scores on the second page could be higher.
+
+```{r}
+preference_NPS = lm(page1_NPS ~ new_logo * preference, data = sbucks)
+summary(preference_NPS)
+```
+No significant effect of preference on NPS.
+
+```{r}
+preference_like_page2 = lm(page2_like ~ new_logo * preference, data = sbucks)
+summary(preference_like_page2)
+```
+People who see the new logo in the first page and switch to preferring the old logo after seeing the second page have lower scores compared to people who see the old logo in the first page and switch to preferring the new logo. This is statistically significant.
+
+Another event which is statistically significant at 0.1 level is, people who saw the new logo and still stuck to liking it have higher scores for the old logo.
